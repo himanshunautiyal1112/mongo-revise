@@ -1,23 +1,31 @@
 const express = require("express");
+const bycrypt = require("bcrypt");
 const { UserModel } = require("./db");
 const jwt = require('jsonwebtoken');
 const { mongoose } = require("mongoose");
 const JWT_SECRATE = "12345ABCE"
 const { auth }  = require('./middelware');
+const { SignupSchema, SigninSchema } = require("./types");
 
 mongoose.connect("mongodb://localhost:27017/mydb")
 
 const app = express();
 app.use(express.json());
 
-app.post("/signup", async (req, res) => {
-    const username = req.body.username;
-    const password = req.body.password;
-    const name = req.body.name;
+app.post("/signup", async(req, res) => {
 
+    const parsedData = SignupSchema.safeParse(req.body);
+    if(!parsedData.success) {
+        return res.json({
+            message: "Incorrect format",
+            error: parsedData.error
+        })
+    }
+    const { username, password, name } = req.body;
+    const hashpass = await bycrypt.hash(password, 10);
     await UserModel.create({
         username: username,
-        password: password,
+        password: hashpass,
         name: name
     })
 
@@ -27,15 +35,23 @@ app.post("/signup", async (req, res) => {
 })
 
 app.post("/signin", async(req, res) => {
-    const username = req.body.username;
-    const password = req.body.password;
+    const parsedData = SigninSchema.safeParse(req.body);
+
+    if(!parsedData.success) {
+        return res.status(403).json({
+            message: "wrong inputs",
+            error: parsedData.error
+        })
+    }
+    const { username, password } = req.body;
 
     const user = await UserModel.findOne({
-        username: username,
-        password: password
+        username: username
     })
 
-    if(!user) {
+    const response = await bycrypt.compare(password, user.password);
+
+    if(!response) {
         res.status(403).json({
             message: "Incorrect credetials"
         })
